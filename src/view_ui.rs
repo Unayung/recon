@@ -28,20 +28,42 @@ const CHAR_HEIGHT: u16 = SPRITE_RENDER_H + CHAR_LABEL_LINES;
 type Sprite = [[u8; SPRITE_W]; SPRITE_H];
 type Palette = &'static [(u8, u8, u8)]; // index 0 unused (transparent)
 
-// Shared raccoon-robot palette — all four states use this.
+// Raccoon-robot palettes — one per session color variant.
 // 1=grey fur  2=dark mask/arms  3=black eyes/nose  4=white muzzle/highlight
-// 5=teal (diamond, chest ring)  6=light grey (egg shell)
-// 7=dark teal (chest centre)    8=lavender (Zzz bubble)
-const PAL_RACCOON: &[(u8, u8, u8)] = &[
-    (0,   0,   0  ),  // 0: transparent
-    (160, 160, 170),  // 1: medium grey fur
-    (70,  70,  80 ),  // 2: dark grey (mask, goggle rim, robot arms)
-    (15,  15,  20 ),  // 3: near-black (eyes, nose)
-    (230, 230, 235),  // 4: white/cream (muzzle, eye highlights)
-    (80,  200, 180),  // 5: teal (forehead diamond, chest ring)
-    (200, 205, 215),  // 6: light grey (egg shell)
-    (40,  130, 115),  // 7: dark teal (chest centre)
-    (180, 180, 220),  // 8: lavender (Zzz bubble)
+// 5=accent (diamond, chest ring)  6=light grey (egg shell)
+// 7=dark accent (chest centre)    8=sleep bubble
+//
+// Indices 0-4 and 6 are shared across all variants; only 5, 7, 8 differ.
+macro_rules! pal {
+    ($a:expr, $da:expr, $sb:expr) => {
+        &[
+            (0,   0,   0  ),  // 0: transparent
+            (160, 160, 170),  // 1: medium grey fur
+            (70,  70,  80 ),  // 2: dark grey (mask, goggle rim, robot arms)
+            (15,  15,  20 ),  // 3: near-black (eyes, nose)
+            (230, 230, 235),  // 4: white/cream (muzzle, eye highlights)
+            $a,               // 5: accent (forehead diamond, chest ring)
+            (200, 205, 215),  // 6: light grey (egg shell)
+            $da,              // 7: dark accent (chest centre)
+            $sb,              // 8: sleep bubble (Zzz)
+        ]
+    };
+}
+
+const PAL_RACCOON: &[(u8, u8, u8)] = pal!((80,200,180), (40,130,115), (180,180,220)); // teal (default)
+const PAL_AMBER:   &[(u8, u8, u8)] = pal!((220,160,40), (150,100,20), (220,200,160)); // amber / gold
+const PAL_PURPLE:  &[(u8, u8, u8)] = pal!((160,100,220),(100,50,160), (210,185,235)); // purple
+const PAL_ROSE:    &[(u8, u8, u8)] = pal!((220,100,140),(155,50,90),  (235,185,210)); // rose / pink
+const PAL_BLUE:    &[(u8, u8, u8)] = pal!((80,145,230), (40,85,165),  (180,205,240)); // blue
+const PAL_LIME:    &[(u8, u8, u8)] = pal!((120,210,80), (70,145,40),  (190,225,175)); // lime green
+
+const PALETTES: &[Palette] = &[
+    PAL_RACCOON,
+    PAL_AMBER,
+    PAL_PURPLE,
+    PAL_ROSE,
+    PAL_BLUE,
+    PAL_LIME,
 ];
 
 // New: raccoon egg — dark spots hint at the mask pattern
@@ -287,6 +309,14 @@ fn session_phase_offset(session_id: &str) -> u64 {
         % 7
 }
 
+fn palette_for_session(session_id: &str) -> Palette {
+    let idx = session_id
+        .bytes()
+        .fold(0u64, |a, b| a.wrapping_mul(31).wrapping_add(b as u64))
+        % PALETTES.len() as u64;
+    PALETTES[idx as usize]
+}
+
 fn status_color(status: &SessionStatus) -> Color {
     match status {
         SessionStatus::New => Color::Blue,
@@ -466,19 +496,20 @@ fn render_room(frame: &mut Frame, app: &App, room: &Room, area: Rect, slot_num: 
             }
             let flat_idx = row_idx * chars_per_row + col_idx;
             let is_selected = selected_agent == Some(flat_idx);
-            render_character(frame, &app.sessions[session_idx], h_chunks[col_idx], app.tick, is_selected);
+            render_character(frame, &app.sessions[session_idx], h_chunks[col_idx], app.tick, is_selected, session_idx);
         }
     }
 }
 
-fn render_character(frame: &mut Frame, session: &Session, area: Rect, tick: u64, is_selected: bool) {
+fn render_character(frame: &mut Frame, session: &Session, area: Rect, tick: u64, is_selected: bool, session_idx: usize) {
     if area.height < 3 || area.width < 4 {
         return;
     }
 
     let offset = session_phase_offset(&session.session_id);
     let anim_frame = animation_frame(&session.status, tick + offset);
-    let (sprite, palette) = sprite_data(&session.status, anim_frame);
+    let (sprite, _) = sprite_data(&session.status, anim_frame);
+    let palette = if session_idx == 0 { PAL_RACCOON } else { palette_for_session(&session.session_id) };
     let ratio = session.token_ratio();
 
     let color = if session.status == SessionStatus::Input {
