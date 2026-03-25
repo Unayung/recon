@@ -28,159 +28,133 @@ const CHAR_HEIGHT: u16 = SPRITE_RENDER_H + CHAR_LABEL_LINES;
 type Sprite = [[u8; SPRITE_W]; SPRITE_H];
 type Palette = &'static [(u8, u8, u8)]; // index 0 unused (transparent)
 
-// Egg palette: 1=cream shell, 2=shadow, 3=green spots
-const PAL_EGG: &[(u8, u8, u8)] = &[
-    (0, 0, 0),         // 0: unused
-    (255, 250, 230),    // 1: cream shell
-    (220, 200, 170),    // 2: shell shadow
-    (180, 220, 180),    // 3: green spots
+// Shared raccoon-robot palette — all four states use this.
+// 1=grey fur  2=dark mask/arms  3=black eyes/nose  4=white muzzle/highlight
+// 5=teal (diamond, chest ring)  6=light grey (egg shell)
+// 7=dark teal (chest centre)    8=lavender (Zzz bubble)
+const PAL_RACCOON: &[(u8, u8, u8)] = &[
+    (0,   0,   0  ),  // 0: transparent
+    (160, 160, 170),  // 1: medium grey fur
+    (70,  70,  80 ),  // 2: dark grey (mask, goggle rim, robot arms)
+    (15,  15,  20 ),  // 3: near-black (eyes, nose)
+    (230, 230, 235),  // 4: white/cream (muzzle, eye highlights)
+    (80,  200, 180),  // 5: teal (forehead diamond, chest ring)
+    (200, 205, 215),  // 6: light grey (egg shell)
+    (40,  130, 115),  // 7: dark teal (chest centre)
+    (180, 180, 220),  // 8: lavender (Zzz bubble)
 ];
 
+// New: raccoon egg — dark spots hint at the mask pattern
 const SPRITE_EGG: [Sprite; 1] = [[
-    [0,0,0,0,1,1,1,0,0,0],
-    [0,0,0,1,1,1,1,1,0,0],
-    [0,0,1,1,1,3,1,1,1,0],
-    [0,0,1,1,1,1,1,1,1,0],
-    [0,0,1,3,1,1,1,3,1,0],
-    [0,0,1,1,1,1,1,1,1,0],
-    [0,0,1,1,1,1,1,1,1,0],
-    [0,0,0,1,2,1,2,1,0,0],
-    [0,0,0,0,1,1,1,0,0,0],
+    [0,0,0,0,6,6,6,0,0,0],
+    [0,0,0,6,6,6,6,6,0,0],
+    [0,0,6,6,6,2,6,6,6,0],  // dark spot
+    [0,0,6,6,6,6,6,6,6,0],
+    [0,0,6,2,6,6,6,2,6,0],  // raccoon eye marks
+    [0,0,6,6,6,6,6,6,6,0],
+    [0,0,6,6,6,6,6,6,6,0],
+    [0,0,0,6,1,6,1,6,0,0],  // crack lines
+    [0,0,0,0,6,6,6,0,0,0],
     [0,0,0,0,0,0,0,0,0,0],
 ]];
 
-// Working palette: 1=green body, 2=dark green, 3=eyes, 4=eye highlight,
-//                  5=blush, 6=mouth, 7=feet, 8=sparkle
-const PAL_WORKING: &[(u8, u8, u8)] = &[
-    (0, 0, 0),
-    (120, 220, 120),    // 1: green body
-    (80, 180, 80),      // 2: darker green
-    (40, 40, 40),       // 3: eyes
-    (255, 255, 255),    // 4: eye highlight
-    (255, 150, 150),    // 5: cheeks
-    (200, 100, 80),     // 6: mouth
-    (100, 200, 100),    // 7: feet
-    (255, 220, 60),     // 8: sparkle
-];
-
+// Working: active raccoon robot, 3 animated frames
 const SPRITE_WORKING: [Sprite; 3] = [
-    // Frame 0: happy, sparkles top
+    // Frame 0: happy normal, teal sparkles above ears
     [
-        [0,0,0,8,1,1,1,8,0,0],
-        [0,0,1,1,1,1,1,1,0,0],
+        [0,5,2,0,0,0,0,2,5,0],  // sparkles above ears
         [0,1,1,1,1,1,1,1,1,0],
-        [0,1,3,4,1,1,3,4,1,0],
-        [0,1,1,1,1,1,1,1,1,0],
-        [0,5,1,1,6,6,1,1,5,0],
-        [0,1,1,1,1,1,1,1,1,0],
-        [0,0,1,1,1,1,1,1,0,0],
-        [0,0,0,7,0,0,7,0,0,0],
-        [0,0,0,0,0,0,0,0,0,0],
+        [1,1,1,1,5,1,1,1,1,1],  // teal diamond
+        [1,2,2,2,2,2,2,2,2,1],  // raccoon mask band
+        [1,2,3,4,2,2,3,4,2,1],  // eyes: 3=pupil 4=highlight
+        [0,1,2,4,4,4,4,2,1,0],  // white muzzle
+        [0,0,1,4,3,3,4,1,0,0],  // muzzle + nose
+        [0,0,2,1,1,1,1,2,0,0],  // neck
+        [0,2,1,5,7,7,5,1,2,0],  // chest: teal ring + dark centre
+        [0,0,2,1,1,1,1,2,0,0],
     ],
-    // Frame 1: squinting
+    // Frame 1: squinting (concentrating)
     [
-        [0,0,0,1,1,1,1,0,0,0],
-        [0,0,1,1,1,1,1,1,0,0],
+        [0,1,2,0,0,0,0,2,1,0],
         [0,1,1,1,1,1,1,1,1,0],
-        [0,1,1,3,1,1,3,1,1,0],
-        [0,1,1,1,1,1,1,1,1,0],
-        [0,5,1,6,1,1,6,1,5,0],
-        [0,1,1,1,1,1,1,1,1,0],
-        [0,0,1,1,1,1,1,1,0,0],
-        [0,0,7,0,0,0,0,7,0,0],
-        [0,0,0,0,0,0,0,0,0,0],
+        [1,1,1,1,5,1,1,1,1,1],
+        [1,2,2,2,2,2,2,2,2,1],
+        [1,2,2,3,2,2,2,3,2,1],  // squint: just pupils, no highlight
+        [0,1,2,4,4,4,4,2,1,0],
+        [0,0,1,4,3,3,4,1,0,0],
+        [0,0,2,1,1,1,1,2,0,0],
+        [0,2,1,5,7,7,5,1,2,0],
+        [0,0,2,1,1,1,1,2,0,0],
     ],
-    // Frame 2: arms out, sparkles
+    // Frame 2: arms raised, sparkles at sides
     [
-        [0,0,8,1,1,1,1,8,0,0],
-        [0,0,1,1,1,1,1,1,0,0],
-        [0,1,1,1,1,1,1,1,1,0],
-        [0,1,4,3,1,1,4,3,1,0],
-        [0,1,1,1,1,1,1,1,1,0],
-        [0,5,1,1,6,6,1,1,5,0],
-        [8,1,1,1,1,1,1,1,1,8],
-        [0,0,1,1,1,1,1,1,0,0],
-        [0,0,0,7,0,0,7,0,0,0],
-        [0,0,0,0,0,0,0,0,0,0],
+        [0,1,2,0,0,0,0,2,1,0],
+        [5,1,1,1,1,1,1,1,1,5],  // sparkles at edges
+        [1,1,1,1,5,1,1,1,1,1],
+        [1,2,2,2,2,2,2,2,2,1],
+        [1,2,3,4,2,2,3,4,2,1],
+        [0,1,2,4,4,4,4,2,1,0],
+        [0,0,1,4,3,3,4,1,0,0],
+        [2,0,2,1,1,1,1,2,0,2],  // robot arms raised at corners
+        [0,2,1,5,7,7,5,1,2,0],
+        [0,0,2,1,1,1,1,2,0,0],
     ],
 ];
 
-// Idle palette: 1=blue-grey body, 2=darker, 3=closed eyes, 4=highlight, 5=feet, 6=Zzz
-const PAL_IDLE: &[(u8, u8, u8)] = &[
-    (0, 0, 0),
-    (140, 160, 200),    // 1: blue-grey body
-    (110, 130, 170),    // 2: darker
-    (60, 60, 80),       // 3: closed eyes
-    (180, 190, 220),    // 4: highlight
-    (120, 140, 180),    // 5: feet
-    (200, 200, 255),    // 6: Zzz
-];
-
+// Idle: sleeping raccoon, Zzz bubble top-right
 const SPRITE_IDLE: [Sprite; 1] = [[
-    [0,0,0,1,1,1,1,0,0,0],
-    [0,0,1,1,1,1,1,1,0,6],
+    [0,1,2,0,0,0,0,2,1,0],
     [0,1,1,1,1,1,1,1,1,0],
-    [0,1,3,3,1,1,3,3,1,6],
-    [0,1,1,1,1,1,1,1,1,0],
-    [0,1,1,1,1,1,1,1,1,0],
-    [0,1,1,1,1,1,1,1,1,0],
-    [0,0,1,1,1,1,1,1,0,0],
-    [0,0,0,5,0,0,5,0,0,0],
-    [0,0,0,0,0,0,0,0,0,0],
+    [1,1,1,1,5,1,1,1,1,8],  // teal diamond; Zzz (8) top-right
+    [1,2,2,2,2,2,2,2,2,8],  // mask band; Zzz continues
+    [1,2,3,3,2,2,3,3,2,1],  // closed eyes (horizontal lines)
+    [0,1,2,4,4,4,4,2,1,0],  // white muzzle
+    [0,0,1,4,3,3,4,1,0,0],  // muzzle + nose
+    [0,0,2,1,1,1,1,2,0,0],
+    [0,2,1,5,7,7,5,1,2,0],
+    [0,0,2,1,1,1,1,2,0,0],
 ]];
 
-// Input (angry) palette: 1=orange body, 2=darker, 3=pupils, 4=eye whites,
-//                        5=angry red, 6=feet, 7=flush
-const PAL_INPUT: &[(u8, u8, u8)] = &[
-    (0, 0, 0),
-    (255, 180, 60),     // 1: orange body
-    (220, 150, 40),     // 2: darker
-    (40, 40, 40),       // 3: pupils
-    (255, 255, 255),    // 4: eye whites
-    (255, 60, 60),      // 5: angry red (brows, mouth)
-    (200, 140, 40),     // 6: feet
-    (255, 100, 100),    // 7: flush/anger
-];
-
+// Input: alert raccoon waiting for input, chest ring pulses, 3 frames
 const SPRITE_INPUT: [Sprite; 3] = [
-    // Frame 0: angry brows down
+    // Frame 0: alert, right ear perked, wide diamond, pulsing chest ring
     [
-        [0,0,0,1,1,1,1,0,0,0],
-        [0,0,1,1,1,1,1,1,0,0],
-        [0,1,5,1,1,1,1,5,1,0],
-        [0,1,1,4,3,3,4,1,1,0],
-        [0,7,1,1,1,1,1,1,7,0],
-        [0,1,1,5,5,5,5,1,1,0],
+        [0,1,2,0,0,0,1,2,1,0],  // right ear raised
         [0,1,1,1,1,1,1,1,1,0],
-        [0,0,1,1,1,1,1,1,0,0],
-        [0,0,0,6,0,0,6,0,0,0],
-        [0,0,0,0,0,0,0,0,0,0],
+        [1,1,1,1,5,5,1,1,1,1],  // wider teal diamond
+        [1,2,2,2,2,2,2,2,2,1],
+        [1,2,3,4,2,2,3,4,2,1],
+        [0,1,2,4,4,4,4,2,1,0],
+        [0,0,1,4,1,1,4,1,0,0],  // open mouth
+        [0,0,2,1,1,1,1,2,0,0],
+        [0,2,5,5,7,7,5,5,2,0],  // chest ring wider (pulsing)
+        [0,0,2,1,1,1,1,2,0,0],
     ],
-    // Frame 1: brows shifted
+    // Frame 1: half-blink
     [
-        [0,0,0,1,1,1,1,0,0,0],
-        [0,0,1,1,1,1,1,1,0,0],
-        [0,1,1,5,1,1,5,1,1,0],
-        [0,1,1,4,3,3,4,1,1,0],
-        [0,7,1,1,1,1,1,1,7,0],
-        [0,1,1,1,5,5,1,1,1,0],
+        [0,1,2,0,0,0,0,2,1,0],
         [0,1,1,1,1,1,1,1,1,0],
-        [0,0,1,1,1,1,1,1,0,0],
-        [0,0,6,0,0,0,0,6,0,0],
-        [0,0,0,0,0,0,0,0,0,0],
+        [1,1,1,1,5,1,1,1,1,1],
+        [1,2,2,2,2,2,2,2,2,1],
+        [1,2,3,3,2,2,3,3,2,1],  // half-closed (blink)
+        [0,1,2,4,4,4,4,2,1,0],
+        [0,0,1,4,3,3,4,1,0,0],
+        [0,0,2,1,1,1,1,2,0,0],
+        [0,2,1,5,7,7,5,1,2,0],
+        [0,0,2,1,1,1,1,2,0,0],
     ],
-    // Frame 2: wider stance
+    // Frame 2: both ears perked, bright 3-wide diamond, pulsing chest
     [
-        [0,0,0,1,1,1,1,0,0,0],
-        [0,0,1,1,1,1,1,1,0,0],
-        [0,1,5,1,1,1,1,5,1,0],
-        [0,1,1,3,4,4,3,1,1,0],
-        [0,1,7,1,1,1,1,7,1,0],
-        [0,1,5,1,5,5,1,5,1,0],
+        [0,1,2,1,0,0,1,2,1,0],  // both ears raised
         [0,1,1,1,1,1,1,1,1,0],
-        [0,0,1,1,1,1,1,1,0,0],
-        [0,0,0,6,0,0,6,0,0,0],
-        [0,0,0,0,0,0,0,0,0,0],
+        [1,1,1,5,5,5,1,1,1,1],  // bright wide diamond
+        [1,2,2,2,2,2,2,2,2,1],
+        [1,2,3,4,2,2,3,4,2,1],  // wide eyes
+        [0,1,2,4,4,4,4,2,1,0],
+        [0,0,1,4,3,3,4,1,0,0],
+        [0,0,2,1,1,1,1,2,0,0],
+        [0,2,5,5,7,7,5,5,2,0],  // pulsing wide chest ring
+        [0,0,2,1,1,1,1,2,0,0],
     ],
 ];
 
@@ -188,10 +162,10 @@ const SPRITE_INPUT: [Sprite; 3] = [
 
 fn sprite_data(status: &SessionStatus, frame: usize) -> (&'static Sprite, Palette) {
     match status {
-        SessionStatus::New => (&SPRITE_EGG[0], PAL_EGG),
-        SessionStatus::Working => (&SPRITE_WORKING[frame % 3], PAL_WORKING),
-        SessionStatus::Idle => (&SPRITE_IDLE[0], PAL_IDLE),
-        SessionStatus::Input => (&SPRITE_INPUT[frame % 3], PAL_INPUT),
+        SessionStatus::New     => (&SPRITE_EGG[0],             PAL_RACCOON),
+        SessionStatus::Working => (&SPRITE_WORKING[frame % 3], PAL_RACCOON),
+        SessionStatus::Idle    => (&SPRITE_IDLE[0],            PAL_RACCOON),
+        SessionStatus::Input   => (&SPRITE_INPUT[frame % 3],   PAL_RACCOON),
     }
 }
 
