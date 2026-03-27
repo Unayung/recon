@@ -12,7 +12,7 @@ use crate::app::App;
 use crate::session::{Session, SessionStatus};
 
 // Layout constants
-const ROOMS_PER_PAGE: usize = 4;
+const MAX_ROOMS_PER_PAGE: usize = 9;
 const SPRITE_W: usize = 10; // pixel columns
 const SPRITE_H: usize = 10; // pixel rows
 const SPRITE_RENDER_H: u16 = (SPRITE_H as u16 + 1) / 2; // terminal lines for sprite (5)
@@ -353,7 +353,7 @@ fn context_bar(ratio: f64) -> (String, Color) {
 
 pub fn resolve_zoom(app: &mut App) {
     let rooms = group_into_rooms(&app.sessions);
-    let total_pages = (rooms.len() + ROOMS_PER_PAGE - 1) / ROOMS_PER_PAGE;
+    let total_pages = (rooms.len() + MAX_ROOMS_PER_PAGE - 1) / MAX_ROOMS_PER_PAGE;
     if total_pages > 0 {
         app.view_page = app.view_page.min(total_pages - 1);
     } else {
@@ -361,7 +361,7 @@ pub fn resolve_zoom(app: &mut App) {
     }
 
     if let Some(idx) = app.view_zoom_index.take() {
-        let page_start = app.view_page * ROOMS_PER_PAGE;
+        let page_start = app.view_page * MAX_ROOMS_PER_PAGE;
         if let Some(room) = rooms.get(page_start + idx) {
             app.view_zoomed_room = Some(room.name.clone());
         }
@@ -388,6 +388,25 @@ pub fn render(frame: &mut Frame, app: &App) {
     render_footer(frame, app, chunks[1]);
 }
 
+/// Compute grid dimensions (cols, rows) for a given room count.
+/// Aims to fill space without empty cells where possible.
+fn grid_dims(n: usize) -> (usize, usize) {
+    match n {
+        0 => (1, 1),
+        1 => (1, 1),
+        2 => (2, 1),
+        3 => (3, 1),
+        4 => (2, 2),
+        5 | 6 => (3, 2),
+        7 | 8 | 9 => (3, 3),
+        _ => {
+            let cols = (n as f64).sqrt().ceil() as usize;
+            let rows = (n + cols - 1) / cols;
+            (cols, rows)
+        }
+    }
+}
+
 fn render_rooms(frame: &mut Frame, app: &App, area: Rect) {
     let rooms = group_into_rooms(&app.sessions);
 
@@ -403,31 +422,43 @@ fn render_rooms(frame: &mut Frame, app: &App, area: Rect) {
         }
     }
 
-    let total_pages = (rooms.len() + ROOMS_PER_PAGE - 1) / ROOMS_PER_PAGE;
+    let total_pages = (rooms.len() + MAX_ROOMS_PER_PAGE - 1) / MAX_ROOMS_PER_PAGE;
     let page = app.view_page.min(total_pages.saturating_sub(1));
-    let page_start = page * ROOMS_PER_PAGE;
+    let page_start = page * MAX_ROOMS_PER_PAGE;
     let page_rooms: Vec<&Room> = rooms
         .iter()
         .skip(page_start)
-        .take(ROOMS_PER_PAGE)
+        .take(MAX_ROOMS_PER_PAGE)
         .collect();
 
-    let v_chunks = Layout::vertical([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
-        .split(area);
-    let top_h = Layout::horizontal([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
-        .split(v_chunks[0]);
-    let bot_h = Layout::horizontal([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
-        .split(v_chunks[1]);
-    let cells = [top_h[0], top_h[1], bot_h[0], bot_h[1]];
+    let count = page_rooms.len();
+    let (cols, rows) = grid_dims(count);
 
-    for (i, cell) in cells.iter().enumerate() {
-        if let Some(room) = page_rooms.get(i) {
-            render_room(frame, app, room, *cell, Some(i + 1), None);
+    // Build row constraints
+    let row_constraints: Vec<Constraint> = (0..rows)
+        .map(|_| Constraint::Ratio(1, rows as u32))
+        .collect();
+    let v_chunks = Layout::vertical(row_constraints).split(area);
+
+    let mut room_idx = 0;
+    for row in 0..rows {
+        // How many rooms in this row? Last row may have fewer.
+        let rooms_this_row = if row == rows - 1 && count % cols != 0 {
+            count % cols
         } else {
-            let block = Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Rgb(30, 30, 30)));
-            frame.render_widget(block, *cell);
+            cols
+        };
+
+        let col_constraints: Vec<Constraint> = (0..rooms_this_row)
+            .map(|_| Constraint::Ratio(1, rooms_this_row as u32))
+            .collect();
+        let h_chunks = Layout::horizontal(col_constraints).split(v_chunks[row]);
+
+        for col in 0..rooms_this_row {
+            if let Some(room) = page_rooms.get(room_idx) {
+                render_room(frame, app, room, h_chunks[col], Some(room_idx + 1), None);
+            }
+            room_idx += 1;
         }
     }
 }
@@ -584,7 +615,7 @@ fn render_empty(frame: &mut Frame, area: Rect, _tick: u64) {
 
 fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
     let rooms = group_into_rooms(&app.sessions);
-    let total_pages = (rooms.len() + ROOMS_PER_PAGE - 1) / ROOMS_PER_PAGE;
+    let total_pages = (rooms.len() + MAX_ROOMS_PER_PAGE - 1) / MAX_ROOMS_PER_PAGE;
     let page = app.view_page.min(total_pages.saturating_sub(1));
 
     let mut spans = vec![];
@@ -601,8 +632,17 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
         spans.push(Span::styled("Esc", Style::default().fg(Color::Cyan)));
         spans.push(Span::raw(" back  "));
     } else {
-        spans.push(Span::styled("1-4", Style::default().fg(Color::Cyan)));
-        spans.push(Span::raw(" zoom  "));
+        let page_start = page * MAX_ROOMS_PER_PAGE;
+        let rooms_on_page = rooms.len().saturating_sub(page_start).min(MAX_ROOMS_PER_PAGE);
+        if rooms_on_page > 0 {
+            let key_range = if rooms_on_page == 1 {
+                "1".to_string()
+            } else {
+                format!("1-{}", rooms_on_page)
+            };
+            spans.push(Span::styled(key_range, Style::default().fg(Color::Cyan)));
+            spans.push(Span::raw(" zoom  "));
+        }
         if total_pages > 1 {
             spans.push(Span::styled("j/k", Style::default().fg(Color::Cyan)));
             spans.push(Span::raw(format!(" page ({}/{})  ", page + 1, total_pages)));
