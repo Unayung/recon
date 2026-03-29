@@ -15,6 +15,7 @@ pub struct App {
     pub sessions: Vec<Session>,
     pub selected: usize,
     pub should_quit: bool,
+    pub keep: bool, // don't quit after switching to a session
     pub view_mode: ViewMode,
     pub tick: u64,
     pub view_page: usize,
@@ -30,6 +31,7 @@ impl App {
             sessions: Vec::new(),
             selected: 0,
             should_quit: false,
+            keep: false,
             view_mode: ViewMode::Table,
             tick: 0,
             view_page: 0,
@@ -77,7 +79,7 @@ impl App {
         if let Some(session) = self.sessions.iter().find(|s| s.status == session::SessionStatus::Input) {
             if let Some(target) = &session.pane_target {
                 tmux::switch_to_pane(target);
-                self.should_quit = true;
+                if !self.keep { self.should_quit = true; }
             }
         }
     }
@@ -100,7 +102,7 @@ impl App {
                 if let Some(session) = self.sessions.get(self.selected) {
                     if let Some(target) = &session.pane_target {
                         tmux::switch_to_pane(target);
-                        self.should_quit = true;
+                        if !self.keep { self.should_quit = true; }
                     }
                 }
             }
@@ -132,7 +134,7 @@ impl App {
                     if let Some(session) = self.selected_zoomed_session() {
                         if let Some(target) = session.pane_target.clone() {
                             tmux::switch_to_pane(&target);
-                            self.should_quit = true;
+                            if !self.keep { self.should_quit = true; }
                         }
                     }
                     return;
@@ -154,7 +156,7 @@ impl App {
                             .unwrap_or_else(|| "claude".to_string());
                         if let Ok(name) = tmux::create_session(&default_name, &cwd) {
                             tmux::switch_to_pane(&name);
-                            self.should_quit = true;
+                            if !self.keep { self.should_quit = true; }
                         }
                     }
                     return;

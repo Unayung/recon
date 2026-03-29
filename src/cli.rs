@@ -6,6 +6,10 @@ use clap::{Parser, Subcommand};
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Command>,
+
+    /// Stay open after switching to a session (useful when recon lives in a dedicated pane)
+    #[arg(long, global = true)]
+    pub keep: bool,
 }
 
 #[derive(Subcommand)]
